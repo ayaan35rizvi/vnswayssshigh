@@ -5,7 +5,7 @@
   "trailingSlash": false,
   "functions": {
     "api/book.ts": {
-      "runtime": "@vercel/node@5.3.0",
+      "runtime": "@vercel/node@3",
       "maxDuration": 10
     }
   },
