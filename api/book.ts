@@ -13,6 +13,7 @@ const SENDER = process.env.RESEND_SENDER ?? "onboarding@resend.dev";
 const SITE = "Varanasi Tour & Travels";
 
 interface BookingInput {
+  type?: "quickCallback" | string;
   fullName?: string;
   phone?: string;
   pickupDate?: string;
@@ -24,9 +25,31 @@ interface BookingInput {
   notes?: string;
 }
 
+interface CallbackInput {
+  type?: string;
+  fullName?: string;
+  phone?: string;
+}
+
+function validatePhone(phone: string | undefined): string | null {
+  if (typeof phone !== "string") return "Please enter a valid phone number.";
+  const digits = phone.trim().replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 15) return "Please enter a valid phone number.";
+  return null;
+}
+
 function validate(body: unknown): { ok: true; data: BookingInput } | { ok: false; message: string } {
   const b = body as BookingInput | undefined;
   if (!b || typeof b !== "object") return { ok: false, message: "Invalid request body." };
+  if (b.type === "quickCallback") {
+    const cb = b as unknown as CallbackInput;
+    if (typeof cb.fullName !== "string" || cb.fullName.trim().length < 2) {
+      return { ok: false, message: "Missing or invalid field: fullName." };
+    }
+    const phoneErr = validatePhone(cb.phone);
+    if (phoneErr) return { ok: false, message: phoneErr };
+    return { ok: true, data: { ...b, fullName: cb.fullName, phone: cb.phone } };
+  }
   const required: (keyof BookingInput)[] = ["fullName", "phone", "pickupDate", "pickupLocation", "dropLocation"];
   for (const k of required) {
     const v = b[k];
@@ -34,11 +57,8 @@ function validate(body: unknown): { ok: true; data: BookingInput } | { ok: false
       return { ok: false, message: `Missing or invalid field: ${k}.` };
     }
   }
-  const phone = (b.phone as string).trim();
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length < 8 || digits.length > 15) {
-    return { ok: false, message: "Please enter a valid phone number." };
-  }
+  const phoneErr = validatePhone(b.phone);
+  if (phoneErr) return { ok: false, message: phoneErr };
   const dateStr = (b.pickupDate as string).trim();
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return { ok: false, message: "Please enter a valid pickup date." };
@@ -53,6 +73,23 @@ function validate(body: unknown): { ok: true; data: BookingInput } | { ok: false
     }
   }
   return { ok: true, data: b };
+}
+
+function callbackHtml(b: BookingInput): string {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1a1a1a;">
+      <h2 style="color: #d97706;">New Quick Call-Back Request</h2>
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <tr><td style="padding: 6px 0; font-weight: bold; width: 150px;">Name</td><td>${b.fullName}</td></tr>
+        <tr><td style="padding: 6px 0; font-weight: bold;">Phone</td><td><a href="tel:${b.phone}" style="color:#d97706;">${b.phone}</a></td></tr>
+        <tr><td style="padding: 6px 0; font-weight: bold;">Request Type</td><td>Quick Call Back (urgent lead)</td></tr>
+      </table>
+      <p style="margin-top: 18px; font-size: 12px; color: #777;">
+        The visitor asked for a quick call back. Please call them back as soon as possible.
+        Submitted via ${SITE} homepage.
+      </p>
+    </div>
+  `;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -84,11 +121,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const b = validation.data;
+  const isCallback = b.type === "quickCallback";
   const payload = {
     from: SENDER,
     to: [RECIPIENT],
-    subject: `New booking enquiry — ${b.tripType ?? "Cab booking"} (${b.vehicle ?? "any vehicle"})`,
-    html: `
+    subject: isCallback ? "New Call-Back Request — URGENT LEAD" : `New booking enquiry — ${b.tripType ?? "Cab booking"} (${b.vehicle ?? "any vehicle"})`,
+    html: isCallback ? callbackHtml(b) : `
       <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1a1a1a;">
         <h2 style="color: #d97706;">New Booking Enquiry</h2>
         <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
