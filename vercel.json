@@ -1,9 +1,19 @@
 {
-  "buildCommand": null,
+  "buildCommand": "npm install --prefix . --no-audit --no-fund",
   "outputDirectory": ".",
   "cleanUrls": true,
   "trailingSlash": false,
+  "functions": {
+    "api/book.ts": {
+      "runtime": "@vercel/node",
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
